@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pay with M-Pesa QR</title>
+</head>
+<body>
+
+<h2>Scan to Pay</h2>
+
+<img id="qrImage" />
+
+<script>
+async function loadQR() {
+
+    const res = await fetch("http://127.0.0.1:8000/qr?amount=1");
+    const data = await res.json();
+
+    const qrBase64 = data.qr.QRCode;
+
+    document.getElementById("qrImage").src =
+        "data:image/png;base64," + qrBase64;
+}
+
+loadQR();
+</script>
+
+</body>
+</html>
