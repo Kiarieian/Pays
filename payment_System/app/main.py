@@ -15,6 +15,7 @@ import requests
 import uuid
 
 from app.models import Payment, Merchant
+from fastapi.middleware.cors import CORSMiddleware
 
 
 app = FastAPI()
@@ -78,7 +79,7 @@ async def pay(request: PaymentRequest, db: Session = Depends(get_db), merchant: 
         db,
         request.phone,
         request.amount,
-        request.checkout_request_id
+        request.checkout_request_id,
         merchant.id
     )
 
@@ -100,3 +101,10 @@ def generate_qr_code():
         "account_ref": account_ref,
         "qr_data": qr_data
     }
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5175"],  # dev url or frontend url
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
