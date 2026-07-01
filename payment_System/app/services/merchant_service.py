@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from app.models import Merchant
 import uuid
 
-def create_merchant(db: Session, name: str, email: str, phone: str)
+def create_merchant(db: Session, name: str, email: str, phone: str):
     existing = (
         db.query(Merchant)
         .filter(Merchant.email == email)
