@@ -78,7 +78,7 @@ def stk_push(merchant: Merchant, phone: str, amount: int, account_reference: str
         f"{creds['shortcode']}{creds['passkey']}{timestamp}".encode()
     ).decode()
 
-    url = f"{_base_url(creds['environment'])}/mpesa/stkpush/v1/processrequest"
+    url = "https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest"
     payload = {
         "BusinessShortCode": creds["shortcode"],
         "Password": password,
@@ -119,7 +119,7 @@ def generate_qr(merchant, amount, account_ref, trx_code="BG"):
     creds = merchant.get_daraja_credentials()
     token = get_access_token(merchant)
 
-    url = f"{_base_url(creds['environment'])}/mpesa/qrcode/v1/generate"
+    url = "https://api.safaricom.co.ke/mpesa/qrcode/v1/generate"
 
     payload = {
         "MerchantName": merchant.business_name,

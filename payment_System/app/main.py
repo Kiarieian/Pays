@@ -2,14 +2,9 @@ import logging
 import time
 import uuid
 
-<<<<<<< HEAD
-from app.models import Payment, Merchant
-from fastapi.middleware.cors import CORSMiddleware
-=======
 from fastapi import FastAPI, Header, HTTPException, Depends, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
->>>>>>> e70dff8 (Replace payment_System with payment_system and update backend)
 
 from app.database import get_db, engine
 from app.models import Base, Merchant, Payment
@@ -90,14 +85,6 @@ def get_current_merchant(
 
     return merchant
 
-<<<<<<< HEAD
-    payment = create_payment(
-        db,
-        request.phone,
-        request.amount,
-        request.checkout_request_id,
-        merchant.id
-=======
 
 def _log(db: Session, merchant_id, endpoint, status_code, start_time, error=None):
     elapsed_ms = int((time.time() - start_time) * 1000)
@@ -129,7 +116,6 @@ def merchant_signup(request: MerchantSignupRequest, db: Session = Depends(get_db
         email=request.email,
         phone=request.phone,
         status="pending",  # flip to "active" after you verify them (manual or automated)
->>>>>>> e70dff8 (Replace payment_System with payment_system and update backend)
     )
     raw_key, key_prefix, key_hash = generate_api_key()
     merchant.api_key_prefix = key_prefix
@@ -264,14 +250,6 @@ def generate_qr_code(
         "raw_response": response,
     }
 
-<<<<<<< HEAD
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5175"],  # dev url or frontend url
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-=======
 
 # ---------------------------------------------------------------------
 # B2C Disbursement — always uses the MERCHANT's own B2C credentials.
@@ -374,4 +352,3 @@ def get_usage(
             for l in logs
         ],
     }
->>>>>>> e70dff8 (Replace payment_System with payment_system and update backend)
