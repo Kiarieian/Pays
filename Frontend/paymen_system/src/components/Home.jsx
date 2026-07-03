@@ -1,10 +1,21 @@
 // Home.jsx
 import React, { useEffect, useState } from "react";
+import { WifiOff, Loader2, RotateCw } from "lucide-react";
 import PaymentDashboard from "./PaymentDashboard";
-import api from "../Api/api"
+import api from "../Api/api";
+import "../components/styles/Payment.css";
+
 export default function Home() {
   // "checking" | "online" | "offline"
   const [backendStatus, setBackendStatus] = useState("checking");
+
+  const checkBackend = () => {
+    setBackendStatus("checking");
+    api
+      .ping()
+      .then(() => setBackendStatus("online"))
+      .catch(() => setBackendStatus("offline"));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -23,32 +34,29 @@ export default function Home() {
     };
   }, []);
 
+  if (backendStatus === "checking") {
+    return (
+      <div className="pd-checking-wrap">
+        <Loader2 size={15} className="pd-spin" />
+        Connecting to till…
+      </div>
+    );
+  }
+
   if (backendStatus === "offline") {
     return (
-      <div
-        className="min-h-screen w-full flex items-center justify-center px-6"
-        style={{ background: "#06140c", color: "#EAF5EE" }}
-      >
-        <div
-          className="max-w-sm w-full rounded-2xl p-6 text-center"
-          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
-        >
-          <p className="text-lg font-semibold mb-2">Backend not reachable</p>
-          <p className="text-sm text-white/50 mb-4">
-            Couldn't connect to <span className="font-mono text-white/70">{api.baseUrl}</span>.
-            Make sure your FastAPI server is running and that CORS is enabled for this origin.
+      <div className="pd-offline-wrap">
+        <div className="pd-offline-card">
+          <div className="pd-offline-icon">
+            <WifiOff size={22} />
+          </div>
+          <p className="pd-offline-title">Connection failure</p>
+          <p className="pd-offline-text">
+            We couldn't reach the payment service. Check your connection and
+            try again.
           </p>
-          <button
-            onClick={() => {
-              setBackendStatus("checking");
-              api
-                .ping()
-                .then(() => setBackendStatus("online"))
-                .catch(() => setBackendStatus("offline"));
-            }}
-            className="px-4 py-2 rounded-lg text-sm font-medium"
-            style={{ background: "linear-gradient(135deg, #9AE600, #00A651)", color: "#06140c" }}
-          >
+          <button className="pd-offline-btn" onClick={checkBackend}>
+            <RotateCw size={14} />
             Retry connection
           </button>
         </div>
