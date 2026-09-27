@@ -4,12 +4,33 @@ import AppHeader from "./components/AppHeader";
 import Dashboard from "./pages/Dashboard";
 import Payments from "./pages/Payments";
 import QRPayment from "./pages/QRPayment";
+import PaymentLinks from "./pages/PaymentLinks";
 import Transactions from "./pages/Transactions";
 import APIIntegration from "./pages/APIIntegration";
+import Checkout from "./pages/Checkout";
 import Login from "./pages/Login";
 import api, { getSessionToken, clearSessionToken } from "./Api/api";
 
+function getPublicIdFromPath() {
+  const path = window.location.pathname;
+  if (path.startsWith("/pay/")) {
+    return path.slice("/pay/".length) || null;
+  }
+  return null;
+}
+
 export default function App() {
+  const publicId = getPublicIdFromPath();
+
+  // Public checkout route — no auth, no dashboard shell
+  if (publicId) {
+    return <Checkout key={publicId} />;
+  }
+
+  return <DashboardApp />;
+}
+
+function DashboardApp() {
   const [page, setPage] = useState("dashboard");
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -111,6 +132,7 @@ export default function App() {
     dashboard: <Dashboard payments={payments} merchant={merchant} onNavigate={setPage} />,
     payments: <Payments />,
     "qr-payment": <QRPayment />,
+    "payment-links": <PaymentLinks />,
     transactions: <Transactions payments={payments} loading={loading} onRefresh={fetchPayments} />,
     "api-integration": <APIIntegration />,
   };

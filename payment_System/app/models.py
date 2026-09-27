@@ -125,6 +125,9 @@ class Payment(Base):
     # Idempotency: prevents duplicate payment creation from merchant retries
     idempotency_key = Column(String, nullable=True, index=True)
 
+    # Optional link to a PaymentLink (nullable for direct payments)
+    payment_link_id = Column(Integer, ForeignKey("payment_links.id"), nullable=True, index=True)
+
     created_at = Column(DateTime, server_default=func.now(), nullable=False, index=True)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -180,19 +183,33 @@ class Disbursement(Base):
 
 
 class PaymentLink(Base):
-    """Merchant payment links (defined but not yet routed)."""
+    """Merchant payment links for shareable payment collection."""
     __tablename__ = "payment_links"
 
     id = Column(Integer, primary_key=True, index=True)
     merchant_id = Column(Integer, ForeignKey("merchants.id"), nullable=False, index=True)
 
-    title = Column(String, nullable=False)
-    description = Column(String)
+    # Public identifier — never expose the integer id to customers
+    public_id = Column(String, unique=True, nullable=False, index=True)
+
+    # Display / business fields
+    description = Column(String, nullable=True)
     amount = Column(Integer, nullable=False)
-    slug = Column(String, unique=True, nullable=False, index=True)
-    active = Column(Boolean, default=True)
+    currency = Column(String, nullable=False, default="KES")
+    account_reference = Column(String, nullable=False)
+
+    # ACTIVE | PAID | EXPIRED | DISABLED
+    status = Column(String, nullable=False, default="ACTIVE", index=True)
+
+    expires_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("ix_payment_links_merchant_status", "merchant_id", "status"),
+        Index("ix_payment_links_merchant_created", "merchant_id", "created_at"),
+    )
 
 
 class APIRequestLog(Base):

@@ -120,6 +120,29 @@ export const api = {
       body: { phone, amount: Number(amount), remarks },
       auth: true,
     }),
+
+  // ---- Payment Links ----
+
+  listPaymentLinks: ({ offset = 0, limit = 50 } = {}) =>
+    request(`/payment-links?offset=${offset}&limit=${limit}`, { method: "GET", auth: true }),
+
+  createPaymentLink: ({ amount, description, account_reference, expires_at }) =>
+    request("/payment-links", {
+      method: "POST",
+      body: {
+        amount: Number(amount),
+        description: description || undefined,
+        account_reference: account_reference || undefined,
+        expires_at: expires_at || undefined,
+      },
+      auth: true,
+    }),
+
+  getPaymentLink: (publicId) =>
+    request(`/payment-links/${publicId}`, { method: "GET", auth: true }),
+
+  disablePaymentLink: (publicId) =>
+    request(`/payment-links/${publicId}/disable`, { method: "POST", auth: true }),
 };
 
 export { ApiError, API_BASE_URL };

@@ -139,17 +139,17 @@ def stk_push(
 
     url = f"{_base_url(creds['environment'])}/mpesa/stkpush/v1/processrequest"
     payload = {
-        "BusinessShortCode": "174379",
+        "BusinessShortCode": creds["shortcode"],
         "Password": password,
         "Timestamp": timestamp,
         "TransactionType": "CustomerPayBillOnline",
-        "Amount": 1,
-        "PartyA": "254708374149",
-        "PartyB": "174379",
-        "PhoneNumber": "254727951049",
+        "Amount": amount,
+        "PartyA": phone,
+        "PartyB": creds["shortcode"],
+        "PhoneNumber": phone,
         "CallBackURL": f"{creds['callback_base_url']}/api/payment/callback/{merchant.id}",
-        "AccountReference": "Test",
-        "TransactionDesc": "Test",
+        "AccountReference": account_reference or "Payment",
+        "TransactionDesc": f"Payment of KSh {amount}",
     }
     headers = {
         "Authorization": f"Bearer {token}",

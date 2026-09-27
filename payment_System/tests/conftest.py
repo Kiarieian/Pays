@@ -6,6 +6,7 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///./test.db")
 os.environ.setdefault("CREDENTIAL_ENCRYPTION_KEY", "XIkBuofwH6Jk55CTrQ6ZeJwGmCWjRclh5stFnS0QQuU=")
 os.environ.setdefault("ADMIN_SECRET", "test-admin-secret-key")
 os.environ.setdefault("ENVIRONMENT", "test")
+os.environ.setdefault("PUBLIC_BASE_URL", "http://localhost:8000")
 
 import pytest
 from sqlalchemy import create_engine

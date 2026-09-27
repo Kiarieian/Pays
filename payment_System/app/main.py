@@ -11,8 +11,11 @@ from pydantic import BaseModel, EmailStr, Field
 
 from app.config import get_settings
 from app.database import get_db
-from app.models import Base, Merchant, MerchantSession, Payment, APIRequestLog
+from app.models import Base, Merchant, MerchantSession, Payment, PaymentLink, APIRequestLog
 from app.services.payment_service import create_payment, create_disbursement, log_api_request
+from app.services.payment_link_service import (
+    create_payment_link, disable_payment_link, check_and_expire_link,
+)
 from app.security import (
     generate_api_key, verify_api_key,
     hash_password, verify_password,
@@ -79,7 +82,7 @@ class PaymentRequest(BaseModel):
 
 class QRRequest(BaseModel):
     amount: int = Field(gt=0)
-    account_reference: str
+    account_reference: str | None = None
     trx_code: str = "BG"
 
 
@@ -364,6 +367,27 @@ class AdminActivationRequest(BaseModel):
     merchant_id: int
 
 
+class PaymentLinkCreateRequest(BaseModel):
+    amount: int = Field(gt=0)
+    description: str | None = None
+    account_reference: str | None = None
+    expires_at: datetime | None = None
+
+
+class PaymentLinkResponse(BaseModel):
+    id: int
+    public_id: str
+    amount: int
+    currency: str
+    description: str | None
+    account_reference: str
+    status: str
+    expires_at: datetime | None
+    payment_url: str
+    created_at: datetime
+    updated_at: datetime
+
+
 @app.post("/admin/merchants/activate")
 def activate_merchant(
     request: AdminActivationRequest,
@@ -550,3 +574,292 @@ def get_usage(
             for l in logs
         ],
     }
+
+
+# ---------------------------------------------------------------------
+# Payment Links
+# ---------------------------------------------------------------------
+@app.post("/payment-links", response_model=PaymentLinkResponse)
+def create_link(
+    request: PaymentLinkCreateRequest,
+    db: Session = Depends(get_db),
+    merchant: Merchant = Depends(get_current_merchant_or_session),
+):
+    start = time.time()
+    link = create_payment_link(
+        db,
+        merchant_id=merchant.id,
+        amount=request.amount,
+        description=request.description,
+        account_reference=request.account_reference,
+        expires_at=request.expires_at,
+    )
+    _log(db, merchant.id, "create_payment_link", 200, start)
+    payment_url = f"{settings.app.public_base_url}/pay/{link.public_id}"
+    return PaymentLinkResponse(
+        id=link.id,
+        public_id=link.public_id,
+        amount=link.amount,
+        currency=link.currency,
+        description=link.description,
+        account_reference=link.account_reference,
+        status=link.status,
+        expires_at=link.expires_at,
+        payment_url=payment_url,
+        created_at=link.created_at,
+        updated_at=link.updated_at,
+    )
+
+
+@app.get("/payment-links")
+def list_links(
+    db: Session = Depends(get_db),
+    merchant: Merchant = Depends(get_current_merchant_or_session),
+    offset: int = 0,
+    limit: int = 50,
+):
+    start = time.time()
+    query = (
+        db.query(PaymentLink)
+        .filter(PaymentLink.merchant_id == merchant.id)
+        .order_by(PaymentLink.created_at.desc())
+    )
+    total = query.count()
+    links = query.offset(offset).limit(limit).all()
+    _log(db, merchant.id, "list_payment_links", 200, start)
+    return {
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "links": [
+            {
+                "id": l.id,
+                "public_id": l.public_id,
+                "amount": l.amount,
+                "currency": l.currency,
+                "description": l.description,
+                "account_reference": l.account_reference,
+                "status": l.status,
+                "expires_at": l.expires_at,
+                "payment_url": f"{settings.app.public_base_url}/pay/{l.public_id}",
+                "created_at": l.created_at,
+                "updated_at": l.updated_at,
+            }
+            for l in links
+        ],
+    }
+
+
+@app.get("/payment-links/{public_id}")
+def get_link(
+    public_id: str,
+    db: Session = Depends(get_db),
+    merchant: Merchant = Depends(get_current_merchant_or_session),
+):
+    start = time.time()
+    link = (
+        db.query(PaymentLink)
+        .filter(PaymentLink.public_id == public_id, PaymentLink.merchant_id == merchant.id)
+        .first()
+    )
+    if not link:
+        _log(db, merchant.id, "get_payment_link", 404, start)
+        raise HTTPException(status_code=404, detail="Payment link not found")
+
+    check_and_expire_link(link)
+    if link.status == "EXPIRED":
+        db.commit()
+
+    _log(db, merchant.id, "get_payment_link", 200, start)
+    return {
+        "id": link.id,
+        "public_id": link.public_id,
+        "amount": link.amount,
+        "currency": link.currency,
+        "description": link.description,
+        "account_reference": link.account_reference,
+        "status": link.status,
+        "expires_at": link.expires_at,
+        "payment_url": f"{settings.app.public_base_url}/pay/{link.public_id}",
+        "created_at": link.created_at,
+        "updated_at": link.updated_at,
+    }
+
+
+@app.post("/payment-links/{public_id}/disable")
+def disable_link(
+    public_id: str,
+    db: Session = Depends(get_db),
+    merchant: Merchant = Depends(get_current_merchant_or_session),
+):
+    start = time.time()
+    link = (
+        db.query(PaymentLink)
+        .filter(PaymentLink.public_id == public_id, PaymentLink.merchant_id == merchant.id)
+        .first()
+    )
+    if not link:
+        _log(db, merchant.id, "disable_payment_link", 404, start)
+        raise HTTPException(status_code=404, detail="Payment link not found")
+
+    check_and_expire_link(link)
+    if link.status == "EXPIRED":
+        db.commit()
+        _log(db, merchant.id, "disable_payment_link", 400, start, "Link already expired")
+        raise HTTPException(status_code=400, detail="Link is expired")
+
+    try:
+        link = disable_payment_link(db, link)
+    except ValueError as e:
+        _log(db, merchant.id, "disable_payment_link", 400, start, str(e))
+        raise HTTPException(status_code=400, detail=str(e))
+
+    _log(db, merchant.id, "disable_payment_link", 200, start)
+    return {
+        "id": link.id,
+        "public_id": link.public_id,
+        "status": link.status,
+        "message": "Payment link disabled",
+    }
+
+
+@app.get("/pay/{public_id}")
+def get_public_link(public_id: str, db: Session = Depends(get_db)):
+    """Public endpoint — no auth required. Used by customers to view payment details."""
+    link = db.query(PaymentLink).filter(PaymentLink.public_id == public_id).first()
+    if not link:
+        raise HTTPException(status_code=404, detail="Payment link not found")
+
+    check_and_expire_link(link)
+    if link.status == "EXPIRED":
+        db.commit()
+        raise HTTPException(status_code=410, detail="Payment link has expired")
+
+    if link.status == "DISABLED":
+        raise HTTPException(status_code=410, detail="Payment link is no longer active")
+
+    # PAID links return their status so the frontend can display it
+    return {
+        "public_id": link.public_id,
+        "amount": link.amount,
+        "currency": link.currency,
+        "description": link.description,
+        "account_reference": link.account_reference,
+        "status": link.status,
+    }
+
+
+class CustomerSTKRequest(BaseModel):
+    phone: str
+
+
+@app.post("/pay/{public_id}/stk")
+def customer_stk_push(
+    public_id: str,
+    request: CustomerSTKRequest,
+    db: Session = Depends(get_db),
+):
+    """Public endpoint — no auth required. Customer initiates STK push via payment link."""
+    start = time.time()
+
+    # Step A: Find PaymentLink
+    link = db.query(PaymentLink).filter(PaymentLink.public_id == public_id).first()
+    if not link:
+        raise HTTPException(status_code=404, detail="Payment link not found")
+
+    # Step B: Validate status
+    check_and_expire_link(link)
+    if link.status == "EXPIRED":
+        db.commit()
+        raise HTTPException(status_code=410, detail="Payment link has expired")
+
+    if link.status == "PAID":
+        raise HTTPException(status_code=409, detail="Payment link has already been paid")
+
+    if link.status == "DISABLED":
+        raise HTTPException(status_code=410, detail="Payment link is no longer active")
+
+    if link.status != "ACTIVE":
+        raise HTTPException(status_code=410, detail="Payment link is no longer active")
+
+    # Step C: Validate phone
+    try:
+        phone = normalize_phone(request.phone)
+    except ValueError as e:
+        _log(db, link.merchant_id, "public_stk_push", 400, start, str(e))
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Load the merchant to get Daraja credentials
+    merchant = db.query(Merchant).filter(Merchant.id == link.merchant_id).first()
+    if not merchant or not merchant.daraja_shortcode:
+        raise HTTPException(status_code=400, detail="Payment service not configured")
+
+    # Step D: Create Payment (linked to PaymentLink)
+    # Use payment_link_id as idempotency key to prevent duplicate submissions
+    idempotency_key = f"link_{link.id}_{phone}"
+    existing_payment = (
+        db.query(Payment)
+        .filter(
+            Payment.merchant_id == link.merchant_id,
+            Payment.idempotency_key == idempotency_key,
+            Payment.status == "PENDING",
+        )
+        .first()
+    )
+    if existing_payment:
+        # Reuse existing pending payment — don't create duplicates
+        checkout_id = existing_payment.checkout_request_id
+        _log(db, link.merchant_id, "public_stk_push", 200, start)
+        return {
+            "payment_id": existing_payment.id,
+            "status": existing_payment.status,
+            "message": "M-Pesa payment request sent to your phone.",
+        }
+
+    # Step E: Initiate STK via existing service
+    try:
+        response = stk_push(merchant, phone, link.amount, link.account_reference)
+    except Exception as e:
+        _log(db, link.merchant_id, "public_stk_push", 502, start, str(e))
+        raise HTTPException(status_code=502, detail=f"Payment service error: {e}")
+
+    checkout_id = response.get("CheckoutRequestID")
+    payment = create_payment(
+        db, phone, link.amount, checkout_id,
+        merchant_id=link.merchant_id,
+        payment_method="stk_push",
+        idempotency_key=idempotency_key,
+        payment_link_id=link.id,
+    )
+    _log(db, link.merchant_id, "public_stk_push", 200, start)
+
+    # Step F: Return customer-safe response
+    return {
+        "payment_id": payment.id,
+        "status": payment.status,
+        "message": "M-Pesa payment request sent to your phone.",
+    }
+
+
+@app.get("/pay/{public_id}/status")
+def get_payment_status(public_id: str, db: Session = Depends(get_db)):
+    """Public endpoint — no auth required. Customer polls for payment status."""
+    link = db.query(PaymentLink).filter(PaymentLink.public_id == public_id).first()
+    if not link:
+        raise HTTPException(status_code=404, detail="Payment link not found")
+
+    # Find the most recent payment for this link
+    payment = (
+        db.query(Payment)
+        .filter(Payment.payment_link_id == link.id)
+        .order_by(Payment.created_at.desc())
+        .first()
+    )
+
+    if not payment:
+        return {"status": link.status}
+
+    result = {"status": payment.status}
+    if payment.status == "SUCCESS" and payment.mpesa_receipt:
+        result["receipt"] = payment.mpesa_receipt
+    return result

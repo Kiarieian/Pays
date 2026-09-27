@@ -145,12 +145,15 @@ export default function Payments() {
 
     setStage("dialing");
     try {
-      const data = await api.pay({ phone, amount: Number(amount) });
+      const data = await api.pay({ phone, amount: Number(amount), account_reference: reference || undefined });
+      const checkoutId = data.checkout_id;
+
+      // Animate phone prompt stages (cosmetic, based on real STK timing)
       setTimeout(() => setStage("prompt"), 600);
       setTimeout(() => setStage("typing-pin"), 2400);
       setTimeout(() => setStage("confirming"), 4200);
 
-      const checkoutId = data.checkout_id;
+      // Poll backend for actual result — never claim success from HTTP 200 alone
       pollRef.current = setInterval(async () => {
         try {
           const list = await api.listPayments();
@@ -166,6 +169,8 @@ export default function Payments() {
           }
         } catch { /* keep polling */ }
       }, 2500);
+
+      // Safety timeout: stop after 45 seconds
       setTimeout(() => {
         stopPoll();
         setStage((s) => (["confirming", "prompt", "typing-pin"].includes(s) ? "failed" : s));

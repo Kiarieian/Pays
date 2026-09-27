@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
-from app.models import Payment, Disbursement, APIRequestLog
+from app.models import Payment, PaymentLink, Disbursement, APIRequestLog
 from app.payment_states import (
     PaymentStatus,
     DisbursementStatus,
@@ -22,6 +22,7 @@ def create_payment(
     merchant_id: int,
     payment_method: str = "stk_push",
     idempotency_key: str | None = None,
+    payment_link_id: int | None = None,
 ) -> Payment:
     """Create a payment record. If idempotency_key is provided and a
     payment with that key already exists for this merchant, return
@@ -54,6 +55,7 @@ def create_payment(
         payment_method=payment_method,
         status=PaymentStatus.PENDING,
         idempotency_key=idempotency_key,
+        payment_link_id=payment_link_id,
     )
     db.add(payment)
     try:
@@ -86,6 +88,7 @@ def update_transaction(
     mpesa_receipt: str | None,
 ) -> Payment | None:
     """Update payment status with state machine validation.
+    If the payment is linked to a PaymentLink, update the link status accordingly.
     Returns None if payment not found or transition is invalid."""
     payment = (
         db.query(Payment)
@@ -107,11 +110,22 @@ def update_transaction(
 
     payment.status = new_status
     payment.mpesa_receipt = mpesa_receipt
+
+    # If this payment is linked to a PaymentLink, update the link status
+    if payment.payment_link_id and new_status == PaymentStatus.SUCCESS:
+        link = db.query(PaymentLink).filter(PaymentLink.id == payment.payment_link_id).first()
+        if link and link.status == "ACTIVE":
+            link.status = "PAID"
+            logger.info(
+                "PaymentLink %s -> PAID (payment %s succeeded)",
+                link.public_id, payment.id,
+            )
+
     db.commit()
     db.refresh(payment)
     logger.info(
         "Payment %s: %s -> %s (receipt: %s)",
-        payment.id, "PENDING", new_status, mpesa_receipt,
+        payment.id, payment.status if payment.status != new_status else "PENDING", new_status, mpesa_receipt,
     )
     return payment
 

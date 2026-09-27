@@ -4,12 +4,14 @@ const STYLES = {
   SUCCESS: "status-success",
   PENDING: "status-warning",
   FAILED: "status-error",
+  TIMEOUT: "status-error",
 };
 
 const LABELS = {
   SUCCESS: "Successful",
   PENDING: "Pending",
   FAILED: "Failed",
+  TIMEOUT: "Timed out",
 };
 
 export default function StatusBadge({ status }) {

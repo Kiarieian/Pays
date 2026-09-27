@@ -16,7 +16,7 @@ export default function QRPayment() {
     setLoading(true);
     setQrCode("");
     try {
-      const data = await api.generateQr({ amount: Number(qrAmount) });
+      const data = await api.generateQr({ amount: Number(qrAmount), account_reference: qrRef || undefined });
       setQrRef(data.account_reference || "");
       if (data.qr_code_base64) {
         setQrCode(data.qr_code_base64);

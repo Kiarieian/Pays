@@ -4,6 +4,7 @@ import {
   CreditCard,
   QrCode,
   Activity,
+  Link2,
   Code,
   ChevronLeft,
   ChevronRight,
@@ -13,6 +14,7 @@ const NAV = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "payments", label: "Payments", icon: CreditCard },
   { key: "qr-payment", label: "QR Payment", icon: QrCode },
+  { key: "payment-links", label: "Payment Links", icon: Link2 },
   { key: "transactions", label: "Transactions", icon: Activity },
   { key: "api-integration", label: "API", icon: Code },
 ];

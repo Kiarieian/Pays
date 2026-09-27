@@ -106,6 +106,9 @@ class AppConfig:
     )
     api_title: str = "M-Pesa Daraja Gateway"
     api_version: str = "1.0.0"
+    public_base_url: str = field(
+        default_factory=lambda: _optional("PUBLIC_BASE_URL", "http://localhost:8000")
+    )
 
     @property
     def is_production(self) -> bool:
