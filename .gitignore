@@ -1,0 +1,48 @@
+# --- Environment & secrets (never commit these) ---
+.env
+.env.*
+!.env.example
+KWY.txt
+*.key
+*.pem
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
+*.pyc
+*.pyd
+
+# --- Node / frontend ---
+node_modules/
+dist/
+build/
+.parcel-cache/
+
+# --- Editor / OS ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# --- Logs / data ---
+*.log
+*.xlsx
+~$*.xlsx
+transactions.xlsx
+
+# --- Testing / coverage ---
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# --- Docker ---
+docker-compose.override.yml

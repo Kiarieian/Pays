@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: payment_saas_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: payment_system
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        working-directory: payment_system
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/payment_saas_test
+          CREDENTIAL_ENCRYPTION_KEY: XIkBuofwH6Jk55CTrQ6ZeJwGmCWjRclh5stFnS0QQuU=
+          ADMIN_SECRET: test-admin-secret-key
+          ENVIRONMENT: test
+          PAYMENT_RATE_LIMIT: "10"
+          DISBURSEMENT_RATE_LIMIT: "5"
+          AUTH_RATE_LIMIT: "10"
+          GENERAL_API_RATE_LIMIT: "60"
+          ADMIN_RATE_LIMIT: "20"
+        run: python -m pytest tests/ -v --tb=short
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint backend
+        working-directory: payment_system
+        run: ruff check app/ tests/

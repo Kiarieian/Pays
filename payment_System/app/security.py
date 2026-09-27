@@ -1,27 +1,15 @@
-
-import os
 import hashlib
 import secrets
 
 from cryptography.fernet import Fernet
 from typing import Optional
-from dotenv import load_dotenv
-# ---------------------------------------------------------------------
-# Master encryption key for Daraja credentials at rest.
-# MUST be set in your .env — generate once with:
-#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-# Never commit this key. Losing it means losing access to all stored
-# merchant Daraja credentials (they'd need to re-enter them).
-# ---------------------------------------------------------------------
-load_dotenv()
 
-try:
-    _FERNET_KEY = os.getenv("CREDENTIAL_ENCRYPTION_KEY")
-except Exception as e:
-    raise RuntimeError(
-        "Invalid CREDENTIAL_ENCRYPTION_KEY "
-    )
-_fernet = Fernet(_FERNET_KEY.encode())
+from app.config import get_settings
+
+settings = get_settings()
+
+_fernet = Fernet(settings.security.credential_encryption_key.encode())
+
 
 def encrypt_value(plaintext: Optional[str]) -> Optional[bytes]:
     """Encrypt a Daraja credential (consumer key, secret, passkey, etc.)."""
@@ -63,3 +51,40 @@ def hash_api_key(raw_key: str) -> str:
 
 def verify_api_key(raw_key: str, stored_hash: str) -> bool:
     return secrets.compare_digest(hash_api_key(raw_key), stored_hash)
+
+
+# ---------------------------------------------------------------------
+# Password hashing for dashboard login.
+# Uses SHA-256 with a random salt.  Not bcrypt (no C dependency),
+# but adequate for this use case with rate-limited login attempts.
+# ---------------------------------------------------------------------
+def hash_password(password: str) -> str:
+    """Hash a password with a random salt. Returns 'salt:hash'."""
+    salt = secrets.token_hex(16)
+    h = hashlib.sha256(f"{salt}{password}".encode()).hexdigest()
+    return f"{salt}:{h}"
+
+
+def verify_password(password: str, stored: str) -> bool:
+    """Verify a password against a 'salt:hash' string."""
+    try:
+        salt, h = stored.split(":", 1)
+    except ValueError:
+        return False
+    computed = hashlib.sha256(f"{salt}{password}".encode()).hexdigest()
+    return secrets.compare_digest(computed, h)
+
+
+# ---------------------------------------------------------------------
+# Session tokens for browser/dashboard access.
+# Opaque tokens stored as SHA-256 hashes.
+# ---------------------------------------------------------------------
+def generate_session_token() -> tuple[str, str]:
+    """Returns (raw_token, sha256_hash_to_store)."""
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    return raw_token, token_hash
+
+
+def hash_session_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()

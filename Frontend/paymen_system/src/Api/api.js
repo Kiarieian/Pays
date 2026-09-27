@@ -3,9 +3,19 @@ const API_BASE_URL =
   (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE_URL) ||
   "http://localhost:8000";
 
-const MERCHANT_API_KEY =
-  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_MERCHANT_API_KEY) ||
-  "";
+let _sessionToken = null;
+
+export function setSessionToken(token) {
+  _sessionToken = token;
+}
+
+export function getSessionToken() {
+  return _sessionToken;
+}
+
+export function clearSessionToken() {
+  _sessionToken = null;
+}
 
 class ApiError extends Error {
   constructor(message, status, payload) {
@@ -25,8 +35,8 @@ async function request(path, { method = "GET", body, headers = {}, auth = false 
     finalBody = JSON.stringify(body);
   }
 
-  if (auth) {
-    finalHeaders["X-API-Key"] = MERCHANT_API_KEY;
+  if (auth && _sessionToken) {
+    finalHeaders["Authorization"] = `Bearer ${_sessionToken}`;
   }
 
   let res;
@@ -37,7 +47,6 @@ async function request(path, { method = "GET", body, headers = {}, auth = false 
       body: finalBody,
     });
   } catch (err) {
-    // Network failure / backend not running / CORS block
     throw new ApiError(
       `Could not reach the backend at ${API_BASE_URL}. Is the server running and CORS enabled?`,
       0,
@@ -67,26 +76,51 @@ async function request(path, { method = "GET", body, headers = {}, auth = false 
 export const api = {
   baseUrl: API_BASE_URL,
 
-  // GET /  — health check
   ping: () => request("/"),
 
-  // GET /token — fetch a Daraja access token (debug route)
-  getToken: () => request("/token"),
+  login: (email, password) =>
+    request("/auth/login", {
+      method: "POST",
+      body: { email, password },
+    }).then((data) => {
+      setSessionToken(data.session_token);
+      return data;
+    }),
 
-  // GET /payments — list all payments
-  listPayments: () => request("/payments"),
+  logout: () =>
+    request("/auth/logout", { method: "POST", auth: true })
+      .finally(() => clearSessionToken()),
 
-  // POST /pay — trigger an STK push. Requires merchant API key.
-  pay: ({ phone, amount }) =>
+  listPayments: () =>
+    request("/payments", { method: "GET", auth: true }),
+
+  listUsage: () =>
+    request("/usage", { method: "GET", auth: true }),
+
+  getProfile: () =>
+    request("/merchants/me", { method: "GET", auth: true }),
+
+  pay: ({ phone, amount, account_reference }) =>
     request("/pay", {
       method: "POST",
-      body: { phone, amount },
+      body: { phone, amount: Number(amount), account_reference },
       auth: true,
     }),
 
-  // GET /generate_qr — generate a scan-to-pay QR code
-  generateQr: ({ amount }) => request(`/generate_qr?amount=${encodeURIComponent(amount)}`),
+  generateQr: ({ amount, account_reference, trx_code = "BG" }) =>
+    request("/generate_qr", {
+      method: "POST",
+      body: { amount: Number(amount), account_reference, trx_code },
+      auth: true,
+    }),
+
+  disburse: ({ phone, amount, remarks }) =>
+    request("/disburse", {
+      method: "POST",
+      body: { phone, amount: Number(amount), remarks },
+      auth: true,
+    }),
 };
 
-export { ApiError, API_BASE_URL, MERCHANT_API_KEY };
+export { ApiError, API_BASE_URL };
 export default api;
